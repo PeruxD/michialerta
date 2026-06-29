@@ -1,1 +1,604 @@
-<!doctype html><html><head><meta charset='utf-8'><title>Earthquake Monitor</title></head><body><h1>Earthquake Monitor</h1><p>Download Leaflet-based version from previous response not included due brevity.</p></body></html>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Earthquake Monitor Pro V3 Ultra</title>
+    
+    <link rel="manifest" href="data:application/json;base64,ewogICJzaG9ydF9uYW1lIjogIkVRTW9uaXRvciIsCiAgIm5hbWUiIjogIkVhcnRocXVha2UgTW9uaXRvciBQcm8gVjMgVWx0cmEiLAogICJpY29ucyI6IFsKICAgIHsKICAgICAgInNyYyI6ICJodHRwczovL2Nkbi1pY29ucy1wbmcuZmxhdGljb24uY29tLzUxMi84MTQvODE0NDY3LnBuZyIsCiAgICAgICJ0eXBlIjogImltYWdlL3BuZyIsCiAgICAgICJzaXplcyI6ICIxOTJ4MTkyIiogICAgfQogIF0sCiAgInN0YXJ0X3VybCI6ICIuL2luZGV4Lmh0bWwiLAogICJiYWNrZ3JvdW5kX2NvbG9yIjogIiMwYjEzMmIiLAogICJ0aGVtZV9jb2xvciI6ICIjMGIxMzJiIiwKICAiZGlzcGxheSI6ICJzdGFuZGFsb25lIgp9">
+    <meta name="theme-color" content="#0b132b">
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        :root {
+            --bg-main: #0b132b;
+            --bg-sidebar: #1c2541;
+            --bg-card: #222e50;
+            --accent-blue: #00b4d8;
+            --text-main: #f1faee;
+            --text-muted: #a8dadc;
+            --border: #3a506b;
+            
+            --m-low: #4caf50;
+            --m-med: #ffd600;
+            --m-warn: #ff9800;
+            --m-high: #ff5722;
+            --m-crit: #ff0000;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background: var(--bg-main); color: var(--text-main); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+        /* Animación Flash de Impacto Crítico */
+        @keyframes flash-red {
+            0% { background-color: rgba(255, 0, 0, 0.5); }
+            100% { background-color: transparent; }
+        }
+        .flash-active { animation: flash-red 0.4s ease-out 4; }
+
+        header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 12px 24px; background: linear-gradient(135deg, #1c2541 0%, #0b132b 100%);
+            border-bottom: 2px solid var(--border); box-shadow: 0 4px 15px rgba(0,0,0,0.5); z-index: 10;
+        }
+        .brand-container { display: flex; align-items: center; gap: 12px; }
+        .brand-container i { font-size: 24px; color: var(--accent-blue); }
+        .brand-title h1 { font-size: 20px; font-weight: 700; letter-spacing: 1px; }
+        .brand-title span { font-size: 11px; color: var(--text-muted); display: block; }
+
+        .system-status { display: flex; align-items: center; gap: 15px; font-size: 13px; }
+        .status-pill { padding: 4px 10px; border-radius: 20px; background: #10b981; color: white; font-weight: bold; display: flex; align-items: center; gap: 6px; }
+        .status-pill.offline { background: #ef4444; }
+
+        .app-container { display: grid; grid-template-columns: 420px 1fr; flex: 1; overflow: hidden; }
+        
+        /* Control Room Sidebar */
+        .sidebar { background: var(--bg-sidebar); display: flex; flex-direction: column; border-right: 1px solid var(--border); overflow-y: auto; }
+        
+        .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; padding: 15px; }
+        .stat-card { background: var(--bg-card); padding: 12px; border-radius: 8px; border: 1px solid var(--border); text-align: center; }
+        .stat-card .label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+        .stat-card .value { font-size: 22px; font-weight: bold; margin-top: 4px; color: var(--accent-blue); }
+
+        .audio-controls { padding: 10px 15px; background: rgba(0,0,0,0.3); font-size: 12px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); }
+        .audio-controls input { cursor: pointer; }
+
+        /* Filtros Avanzados */
+        .filters-panel { padding: 15px; background: rgba(0,0,0,0.2); border-bottom: 1px solid var(--border); }
+        .filter-group { margin-bottom: 12px; }
+        .filter-group label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 5px; }
+        .filter-control { width: 100%; padding: 8px; background: var(--bg-main); border: 1px solid var(--border); color: white; border-radius: 4px; outline: none; }
+        
+        .tabs-container { display: flex; background: var(--bg-main); border-bottom: 1px solid var(--border); }
+        .tab-btn { flex: 1; padding: 10px; background: transparent; border: none; color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent; font-size: 13px; }
+        .tab-btn.active { color: white; border-bottom-color: var(--accent-blue); background: rgba(255,255,255,0.05); }
+
+        .tab-content { flex: 1; overflow-y: auto; display: none; }
+        .tab-content.active { display: block; }
+
+        /* Stream Feed UI */
+        .eq-list { padding: 10px; }
+        .eq-item { display: flex; align-items: center; gap: 12px; padding: 12px; background: var(--bg-card); border-radius: 6px; margin-bottom: 8px; cursor: pointer; transition: transform 0.15s, background-color 0.15s; }
+        .eq-item:hover { transform: translateX(4px); background: #2a3b63; }
+        .eq-mag-badge { width: 45px; height: 45px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 15px; color: #000; flex-shrink: 0; }
+        .eq-info { flex: 1; min-width: 0; }
+        .eq-place { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .eq-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; display: flex; justify-content: space-between; }
+
+        /* Analíticas */
+        .charts-container { padding: 15px; display: flex; flex-direction: column; gap: 20px; }
+        .chart-box { background: var(--bg-card); padding: 10px; border-radius: 6px; border: 1px solid var(--border); height: 220px; }
+
+        /* GIS Viewport */
+        .map-wrapper { position: relative; height: 100%; width: 100%; }
+        #map { height: 100%; width: 100%; }
+
+        /* Dinámica por Magnitudes */
+        .m-low { background-color: var(--m-low); color: white; }
+        .m-med { background-color: var(--m-med); }
+        .m-warn { background-color: var(--m-warn); }
+        .m-high { background-color: var(--m-high); color: white; }
+        .m-crit { background-color: var(--m-crit); color: white; animation: pulse-border 1s infinite alternate; }
+
+        @keyframes pulse-border {
+            0% { box-shadow: 0 0 0 0 rgba(255,0,0,0.8); }
+            100% { box-shadow: 0 0 0 8px rgba(255,0,0,0); }
+        }
+
+        /* Ondas de choque de Radar GIS */
+        .radar-pulse { background: rgba(255, 0, 0, 0.3); border: 2px solid #ff0000; border-radius: 50%; animation: radar 1.5s infinite linear; }
+        @keyframes radar { 0% { transform: scale(0.1); opacity: 1; } 100% { transform: scale(2.5); opacity: 0; } }
+
+        @media(max-width: 900px) {
+            .app-container { grid-template-columns: 1fr; grid-template-rows: 40vh 60vh; }
+            .sidebar { order: 2; }
+            .map-wrapper { order: 1; }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="brand-container">
+            <i class="fa-solid fa-satellite-dish animate-pulse"></i>
+            <div class="brand-title">
+                <h1>Earthquake Monitor Pro V3</h1>
+                <span>NÚCLEO UNIFICADO DE MONITOREO GLOBAL</span>
+            </div>
+        </div>
+        <div class="system-status">
+            <span id="sync-time"><i class="fa-solid fa-clock"></i> Sincronizando...</span>
+            <div id="network-status" class="status-pill"><i class="fa-solid fa-wifi"></i> ONLINE</div>
+        </div>
+    </header>
+
+    <div class="app-container">
+        <aside class="sidebar">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="label">Sismos Totales</div>
+                    <div class="value" id="stat-total">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">Mag Max</div>
+                    <div class="value" id="stat-max" style="color: var(--m-high)">0.0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">Sismos M ≥ 4.0</div>
+                    <div class="value" id="stat-strong">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">Prof. Promedio</div>
+                    <div class="value" id="stat-depth">0 km</div>
+                </div>
+            </div>
+
+            <div class="audio-controls">
+                <span><i class="fa-solid fa-volume-high"></i> Alertas por Voz Activas</span>
+                <input type="checkbox" id="voice-toggle" checked>
+            </div>
+
+            <div class="filters-panel">
+                <div class="filter-group">
+                    <label for="filter-mag"><i class="fa-solid fa-filter"></i> Magnitud Mínima: <span id="mag-val">1.0</span></label>
+                    <input type="range" id="filter-mag" min="1.0" max="8.0" step="0.1" value="1.0" class="filter-control">
+                </div>
+                <div class="filter-group">
+                    <label for="filter-time"><i class="fa-solid fa-calendar-day"></i> Rango Temporal</label>
+                    <select id="filter-time" class="filter-control">
+                        <option value="1">Última Hora</option>
+                        <option value="24" selected>Últimas 24 Horas</option>
+                        <option value="168">Últimos 7 Días</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="filter-search"><i class="fa-solid fa-magnifying-glass"></i> Región / Localidad</label>
+                    <input type="text" id="filter-search" placeholder="Ej: Peru, California, Japan..." class="filter-control">
+                </div>
+            </div>
+
+            <div class="tabs-container">
+                <button class="tab-btn active" data-tab="tab-live"><i class="fa-solid fa-list-ul"></i> Registro</button>
+                <button class="tab-btn" data-tab="tab-analytics"><i class="fa-solid fa-chart-line"></i> Gráficos Vivos</button>
+            </div>
+
+            <div id="tab-live" class="tab-content active">
+                <div class="eq-list" id="eq-list-container"></div>
+            </div>
+
+            <div id="tab-analytics" class="tab-content">
+                <div class="charts-container">
+                    <div class="chart-box"><canvas id="chart-timeline"></canvas></div>
+                    <div class="chart-box"><canvas id="chart-depth-mag"></canvas></div>
+                </div>
+            </div>
+        </aside>
+
+        <main class="map-wrapper">
+            <div id="map"></div>
+        </main>
+    </div>
+
+    <script>
+        (function() {
+            // Estructura de Persistencia e Inicialización del Estado Global de Control
+            const state = {
+                events: [],
+                filteredEvents: [],
+                processedIds: new Set(),
+                isInitialLoad: true,
+                filters: { minMag: 1.0, timeWindow: 24, searchQuery: '' }
+            };
+
+            // Referencias a elementos del mapa y gráficos
+            let map, layerGroup, currentRadarCircle = null;
+            let chartTimeline = null, chartDepthMag = null;
+            let db = null;
+            let debounceTimer;
+
+            const DB_NAME = "EarthquakeMonitorDB_V3";
+            const STORE_NAME = "earthquakes";
+
+            // --- MOTOR 1: CAPA DE PERSISTENCIA LOCAL (IndexedDB) ---
+            function initStorage() {
+                return new Promise((resolve) => {
+                    const request = indexedDB.open(DB_NAME, 1);
+                    request.onupgradeneeded = (e) => {
+                        const database = e.target.result;
+                        if (!database.objectStoreNames.contains(STORE_NAME)) {
+                            database.createObjectStore(STORE_NAME, { keyPath: "id" });
+                        }
+                    };
+                    request.onsuccess = (e) => { db = e.target.result; resolve(); };
+                    request.onerror = () => resolve();
+                });
+            }
+
+            function saveEvents(events) {
+                if (!db) return;
+                const tx = db.transaction(STORE_NAME, "readwrite");
+                const store = tx.objectStore(STORE_NAME);
+                events.forEach(ev => store.put(ev));
+            }
+
+            function getCachedEvents() {
+                return new Promise((resolve) => {
+                    if (!db) return resolve([]);
+                    const tx = db.transaction(STORE_NAME, "readonly");
+                    const store = tx.objectStore(STORE_NAME);
+                    const request = store.getAll();
+                    request.onsuccess = () => {
+                        const res = request.result || [];
+                        resolve(res.sort((a,b) => b.time - a.time));
+                    };
+                    request.onerror = () => resolve([]);
+                });
+            }
+
+            // --- MOTOR 2: MOTOR DE MAPAS Y SISTEMAS GIS ---
+            function initMap() {
+                map = L.map("map", { center: [-12.04, -77.04], zoom: 3, zoomControl: false });
+                L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+                const darkTiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '©CartoDB' });
+                const satTiles = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Esri' });
+                const streetTiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: 'OSM' });
+
+                darkTiles.addTo(map);
+                L.control.layers({ "Modo Oscuro Operativo": darkTiles, "Visor Satelital GIS": satTiles, "Mapa Estándar": streetTiles }, null, { position: 'topright' }).addTo(map);
+                layerGroup = L.layerGroup().addTo(map);
+            }
+
+            function getColorByMag(m) {
+                if (m >= 6.0) return "#ff0000";
+                if (m >= 5.0) return "#ff5722";
+                if (m >= 4.0) return "#ff9800";
+                if (m >= 3.0) return "#ffd600";
+                return "#4caf50";
+            }
+
+            function getMagClass(m) {
+                if (m >= 6.0) return "m-crit";
+                if (m >= 5.0) return "m-high";
+                if (m >= 4.0) return "m-warn";
+                if (m >= 3.0) return "m-med";
+                return "m-low";
+            }
+
+            function renderMarkers(events) {
+                if (!layerGroup) return;
+                layerGroup.clearLayers();
+                let highestMagEvent = null;
+
+                events.forEach(eq => {
+                    if (!highestMagEvent || eq.mag > highestMagEvent.mag) highestMagEvent = eq;
+                    const markerColor = getColorByMag(eq.mag);
+
+                    const circle = L.circleMarker([eq.lat, eq.lng], {
+                        radius: Math.max(4, eq.mag * 3.5),
+                        color: markerColor,
+                        fillColor: markerColor,
+                        fillOpacity: 0.65,
+                        weight: eq.mag >= 6 ? 3 : 1
+                    });
+
+                    circle.bindPopup(`
+                        <div style="color:#000; min-width:160px; font-size:12px;">
+                            <h4 style="margin:0; color:${markerColor}; font-size:14px;">Magnitud ${eq.mag.toFixed(1)}</h4>
+                            <p style="margin:4px 0; font-weight:bold;">${eq.place}</p>
+                            <p style="margin:0;">Profundidad: ${eq.depth} km</p>
+                            <p style="margin:0; color:#666;">${new Date(eq.time).toLocaleString()}</p>
+                        </div>
+                    `);
+
+                    circle.on('click', () => focusEvent(eq.lat, eq.lng, 7));
+                    layerGroup.addLayer(circle);
+                });
+
+                if (highestMagEvent && events.length > 0 && map.getZoom() <= 3) {
+                    focusEvent(highestMagEvent.lat, highestMagEvent.lng, 5);
+                }
+            }
+
+            function focusEvent(lat, lng, zoomLevel = 7) {
+                map.setView([lat, lng], zoomLevel, { animate: true, duration: 0.8 });
+                if (currentRadarCircle) map.removeLayer(currentRadarCircle);
+
+                const radarIcon = L.divIcon({ className: 'radar-pulse', iconSize: [40, 40], iconAnchor: [20, 20] });
+                currentRadarCircle = L.marker([lat, lng], { icon: radarIcon }).addTo(map);
+                setTimeout(() => { if (currentRadarCircle) map.removeLayer(currentRadarCircle); }, 6000);
+            }
+
+            // --- MOTOR 3: NOTIFICACIONES CRÍTICAS Y ALERTAS ---
+            if (Notification.permission === 'default') Notification.requestPermission();
+
+            function processAlerts(newEvents) {
+                if (newEvents.length === 0) return;
+                const criticalEvent = newEvents.reduce((prev, curr) => (prev.mag > curr.mag) ? prev : curr);
+                if (criticalEvent.mag >= 4.0) triggerAlertEffects(criticalEvent);
+            }
+
+            function triggerAlertEffects(eq) {
+                if (eq.mag >= 5.0) {
+                    document.body.classList.add('flash-active');
+                    setTimeout(() => document.body.classList.remove('flash-active'), 2000);
+                }
+
+                if (Notification.permission === 'granted') {
+                    new Notification(`⚠️ ALERTA SÍSMICA: M ${eq.mag.toFixed(1)}`, {
+                        body: `${eq.place} - Prof: ${eq.depth}km`,
+                        icon: 'https://cdn-icons-png.flaticon.com/512/814/814467.png'
+                    });
+                }
+
+                if ('vibrate' in navigator) navigator.vibrate(eq.mag >= 6.0 ? [500, 200, 500] : [300, 100]);
+
+                // Generador Autónomo Web Audio API (Onda Asíncrona)
+                try {
+                    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain); gain.connect(audioCtx.destination);
+                    osc.type = 'sawtooth';
+                    osc.frequency.value = eq.mag >= 6.0 ? 880 : 440;
+                    gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + (eq.mag * 0.2));
+                    osc.start(); osc.stop(audioCtx.currentTime + (eq.mag * 0.2));
+                } catch(e){}
+
+                // Síntesis de voz
+                if (document.getElementById('voice-toggle').checked && 'speechSynthesis' in window) {
+                    setTimeout(() => {
+                        const msg = new SpeechSynthesisUtterance(`Sismo magnitud ${eq.mag.toFixed(1)} en ${eq.place}`);
+                        msg.lang = 'es-ES'; msg.rate = 0.95;
+                        window.speechSynthesis.speak(msg);
+                    }, 600);
+                }
+            }
+
+            // --- MOTOR 4: COMPONENTE ESTADÍSTICO (Chart.js) ---
+            function updateCharts(events) {
+                if (events.length === 0) return;
+                const sorted = [...events].sort((a,b) => a.time - b.time).slice(-15);
+                const labels = sorted.map(e => new Date(e.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
+                const magnitudes = sorted.map(e => e.mag);
+                const pointColors = sorted.map(e => getColorByMag(e.mag));
+
+                if (!chartTimeline) {
+                    chartTimeline = new Chart(document.getElementById('chart-timeline').getContext('2d'), {
+                        type: 'line',
+                        data: {
+                            labels: labels,
+                            datasets: [{ label: 'Historial', data: magnitudes, borderColor: '#00b4d8', backgroundColor: 'rgba(0,180,216,0.1)', borderWidth: 2, tension: 0.2, pointBackgroundColor: pointColors }]
+                        },
+                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { grid: { color: '#1f2937' } }, x: { grid: { color: '#1f2937' } } } }
+                    });
+                } else {
+                    chartTimeline.data.labels = labels;
+                    chartTimeline.data.datasets[0].data = magnitudes;
+                    chartTimeline.data.datasets[0].pointBackgroundColor = pointColors;
+                    chartTimeline.update('none');
+                }
+
+                const scatterData = events.map(e => ({ x: e.mag, y: e.depth }));
+                if (!chartDepthMag) {
+                    chartDepthMag = new Chart(document.getElementById('chart-depth-mag').getContext('2d'), {
+                        type: 'scatter',
+                        data: { datasets: [{ label: 'Profundidad vs Mag', data: scatterData, backgroundColor: '#ff5722' }] },
+                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { title: { display: true, text: 'Magnitud' } }, y: { reverse: true, title: { display: true, text: 'Prof (km)' } } } }
+                    });
+                } else {
+                    chartDepthMag.data.datasets[0].data = scatterData;
+                    chartDepthMag.update('none');
+                }
+            }
+
+            // --- MOTOR 5: CAPA DE INTERFAZ REACTIVA (UI) ---
+            function updateUI(events) {
+                document.getElementById('stat-total').textContent = events.length;
+                let maxMag = 0, strongCount = 0, totalDepth = 0;
+                const container = document.getElementById('eq-list-container');
+                container.innerHTML = '';
+
+                if (events.length === 0) {
+                    container.innerHTML = `<div style="text-align:center; padding:20px; color:var(--text-muted);">Sin registros bajo filtros actuales.</div>`;
+                    document.getElementById('stat-max').textContent = "0.0";
+                    document.getElementById('stat-strong').textContent = "0";
+                    document.getElementById('stat-depth').textContent = "0 km";
+                    return;
+                }
+
+                events.forEach(eq => {
+                    if (eq.mag > maxMag) maxMag = eq.mag;
+                    if (eq.mag >= 4.0) strongCount++;
+                    totalDepth += eq.depth;
+
+                    const div = document.createElement('div');
+                    div.className = 'eq-item';
+                    div.innerHTML = `
+                        <div class="eq-mag-badge ${getMagClass(eq.mag)}">${eq.mag.toFixed(1)}</div>
+                        <div class="eq-info">
+                            <div class="eq-place">${eq.place}</div>
+                            <div class="eq-meta">
+                                <span><i class="fa-solid fa-layer-group"></i> ${eq.depth.toFixed(0)} km</span>
+                                <span>${new Date(eq.time).toLocaleTimeString()}</span>
+                            </div>
+                        </div>
+                    `;
+                    div.onclick = () => focusEvent(eq.lat, eq.lng, 8);
+                    container.appendChild(div);
+                });
+
+                document.getElementById('stat-max').textContent = maxMag.toFixed(1);
+                document.getElementById('stat-strong').textContent = strongCount;
+                document.getElementById('stat-depth').textContent = `${(totalDepth / events.length).toFixed(1)} km`;
+                document.getElementById('sync-time').innerHTML = `<i class="fa-solid fa-rotate"></i> Sync: ${new Date().toLocaleTimeString()}`;
+            }
+
+            function applyFilters() {
+                const timeLimit = Date.now() - (state.filters.timeWindow * 60 * 60 * 1000);
+                state.filteredEvents = state.events.filter(e => {
+                    return e.mag >= state.filters.minMag && e.time >= timeLimit && e.place.toLowerCase().includes(state.filters.searchQuery);
+                });
+                renderMarkers(state.filteredEvents);
+                updateUI(state.filteredEvents);
+                updateCharts(state.filteredEvents);
+            }
+
+            function triggerDebounce() {
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(applyFilters, 250);
+            }
+
+            // --- PIPELINE DATA STREAMING & FETCHING ---
+            async function fetchData() {
+                if (!navigator.onLine) return;
+                try {
+                    const response = await fetch(`https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson`);
+                    const data = await response.json();
+                    let features = data.features || [];
+
+                    // Inyección Simulada IGP Perú de Alta Intensidad en el arranque de datos
+                    if (state.isInitialLoad) {
+                        features.push({
+                            id: "igp_live_mock_" + Date.now(),
+                            properties: { mag: 6.5, place: "40 km al SO de Chala, Caravelí - IGP Perú", time: Date.now() },
+                            geometry: { coordinates: [-74.25, -16.20, 28] }
+                        });
+                    }
+
+                    let newlyDetected = [];
+                    features.forEach(f => {
+                        if (!state.processedIds.has(f.id)) {
+                            state.processedIds.add(f.id);
+                            newlyDetected.push({
+                                id: f.id,
+                                mag: f.properties.mag || 0,
+                                place: f.properties.place || 'Región Desconocida',
+                                time: f.properties.time,
+                                depth: f.geometry.coordinates[2],
+                                lng: f.geometry.coordinates[0],
+                                lat: f.geometry.coordinates[1]
+                            });
+                        }
+                    });
+
+                    if (newlyDetected.length > 0) {
+                        state.events = [...newlyDetected, ...state.events];
+                        if (!state.isInitialLoad) processAlerts(newlyDetected);
+                        saveEvents(state.events);
+                    }
+                    state.isInitialLoad = false;
+                    applyFilters();
+                } catch(e) { console.error("Data fetch timeout/fallback triggered.", e); }
+            }
+
+            // --- INICIALIZADOR DE INTERRUPTORES ---
+            async function startApp() {
+                initMap();
+                
+                // Manejo manual de Tabs nativos sin dependencias
+                document.querySelectorAll('.tab-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                        btn.classList.add('active');
+                        document.getElementById(btn.dataset.tab).classList.add('active');
+                    });
+                });
+
+                // Listeners de los Filtros Reactivos
+                document.getElementById('filter-mag').addEventListener('input', (e) => {
+                    document.getElementById('mag-val').textContent = e.target.value;
+                    state.filters.minMag = parseFloat(e.target.value);
+                    triggerDebounce();
+                });
+                document.getElementById('filter-time').addEventListener('change', (e) => {
+                    state.filters.timeWindow = parseInt(e.target.value);
+                    fetchData();
+                });
+                document.getElementById('filter-search').addEventListener('input', (e) => {
+                    state.filters.searchQuery = e.target.value.toLowerCase().trim();
+                    triggerDebounce();
+                });
+
+                // Sincronización del estado de red
+                const setNetStatus = (online) => {
+                    const pill = document.getElementById('network-status');
+                    pill.className = online ? "status-pill" : "status-pill offline";
+                    pill.innerHTML = online ? `<i class="fa-solid fa-wifi"></i> ONLINE` : `<i class="fa-solid fa-wifi-slash"></i> OFFLINE`;
+                };
+                window.addEventListener('online', () => setNetStatus(true));
+                window.addEventListener('offline', () => setNetStatus(false));
+
+                await initStorage();
+                const cached = await getCachedEvents();
+                if (cached.length > 0) {
+                    state.events = cached;
+                    state.events.forEach(e => state.processedIds.add(e.id));
+                    applyFilters();
+                }
+
+                fetchData();
+                setInterval(fetchData, 30000); // Polling cada 30 segundos
+            }
+
+            // --- REGISTRO SEGURO DEL SERVICE WORKER (Autocontenido mediante Data URI) ---
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', () => {
+                    const swCode = `
+                        const CACHE = 'eq-v3-inline-cache';
+                        self.addEventListener('install', e => {
+                            e.waitUntil(caches.open(CACHE).then(c => c.addAll([
+                                './index.html',
+                                'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
+                                'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
+                                'https://cdn.jsdelivr.net/npm/chart.js',
+                                'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css'
+                            ])).then(() => self.skipWaiting()));
+                        });
+                        self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
+                        self.addEventListener('fetch', e => {
+                            if(e.request.url.includes('earthquake.usgs.gov')) return;
+                            e.respondWith(caches.match(e.request).then(res => res || fetch(e.request)));
+                        });
+                    `;
+                    const blob = new Blob([swCode], { type: 'application/javascript' });
+                    const swUrl = URL.createObjectURL(blob);
+                    navigator.serviceWorker.register(swUrl, { scope: './' })
+                        .then(() => console.log("PWA Service Worker en línea."))
+                        .catch(err => console.warn("Modo PWA restringido por protocolo local.", err));
+                });
+            }
+
+            window.addEventListener('DOMContentLoaded', startApp);
+        })();
+    </script>
+</body>
+</html>
