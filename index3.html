@@ -3,16 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Earthquake Monitor Pro V3 Ultra - Multi-Source</title>
+    <title>Earthquake Monitor Pro V3 - REALTIME STREAM</title>
     
     <link rel="manifest" href="data:application/json;base64,ewogICJzaG9ydF9uYW1lIjogIkVRTW9uaXRvciIsCiAgIm5hbWUiIjogIkVhcnRocXVha2UgTW9uaXRvciBQcm8gVjMgVWx0cmEiLAogICJpY29ucyI6IFsKICAgIHsKICAgICAgInNyYyI6ICJodHRwczovL2Nkbi1pY29ucy1wbmcuZmxhdGljb24uY29tLzUxMi84MTQvODE0NDY3LnBuZyIsCiAgICAgICJ0eXBlIjogImltYWdlL3BuZyIsCiAgICAgICJzaXplcyI6ICIxOTJ4MTkyIiogICAgfQogIF0sCiAgInN0YXJ0X3VybCI6ICIuL2luZGV4Lmh0bWwiLAogICJiYWNrZ3JvdW5kX2NvbG9yIjogIiMwYjEzMmIiLAogICJ0aGVtZV9jb2xvciI6ICIjMGIxMzJiIiwKICAmRpc3BsYXkiOiAic3RhbmRhbG9uZSIKfQ==">
     <meta name="theme-color" content="#0b132b">
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <style>
@@ -24,25 +22,18 @@
             --text-main: #f1faee;
             --text-muted: #a8dadc;
             --border: #3a506b;
-            
-            --m-low: #4caf50;
-            --m-med: #ffd600;
-            --m-warn: #ff9800;
-            --m-high: #ff5722;
-            --m-crit: #ff0000;
-
-            --src-usgs: #10b981;
-            --src-emsc: #3b82f6;
+            --m-low: #4caf50; --m-med: #ffd600; --m-warn: #ff9800; --m-high: #ff5722; --m-crit: #ff0000;
+            --src-usgs: #10b981; --src-emsc: #3b82f6;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         body { background: var(--bg-main); color: var(--text-main); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 
-        @keyframes flash-red {
-            0% { background-color: rgba(255, 0, 0, 0.5); }
-            100% { background-color: transparent; }
-        }
-        .flash-active { animation: flash-red 0.4s ease-out 4; }
+        @keyframes flash-red { 0% { background-color: rgba(255, 0, 0, 0.4); } 100% { background-color: transparent; } }
+        .flash-active { animation: flash-red 0.4s ease-out 3; }
+
+        @keyframes slide-in { 0% { opacity: 0; transform: translateY(-20px); background: #3a506b; } 100% { opacity: 1; transform: translateY(0); } }
+        .new-arrival { animation: slide-in 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) once; }
 
         header {
             display: flex; justify-content: space-between; align-items: center;
@@ -57,72 +48,64 @@
         .system-status { display: flex; align-items: center; gap: 15px; font-size: 13px; }
         .status-pill { padding: 4px 10px; border-radius: 20px; background: #1a2238; border: 1px solid var(--border); color: white; font-weight: bold; display: flex; align-items: center; gap: 6px; font-size: 11px; }
         .status-pill span.online { color: #10b981; }
+        .status-pill span.connecting { color: #f59e0b; animation: pulse 1s infinite alternate; }
         .status-pill span.offline { color: #ef4444; }
 
+        @keyframes pulse { 0% { opacity: 0.4; } 100% { opacity: 1; } }
+
         .app-container { display: grid; grid-template-columns: 420px 1fr; flex: 1; overflow: hidden; }
-        
         .sidebar { background: var(--bg-sidebar); display: flex; flex-direction: column; border-right: 1px solid var(--border); overflow-y: auto; }
         
         .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; padding: 15px; }
         .stat-card { background: var(--bg-card); padding: 12px; border-radius: 8px; border: 1px solid var(--border); text-align: center; }
-        .stat-card .label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+        .stat-card .label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; }
         .stat-card .value { font-size: 22px; font-weight: bold; margin-top: 4px; color: var(--accent-blue); }
 
         .audio-controls { padding: 10px 15px; background: rgba(0,0,0,0.3); font-size: 12px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); }
-        .audio-controls input { cursor: pointer; }
-
+        
         .filters-panel { padding: 15px; background: rgba(0,0,0,0.2); border-bottom: 1px solid var(--border); }
         .filter-group { margin-bottom: 12px; }
         .filter-group label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 5px; }
         .filter-control { width: 100%; padding: 8px; background: var(--bg-main); border: 1px solid var(--border); color: white; border-radius: 4px; outline: none; }
         
         .tabs-container { display: flex; background: var(--bg-main); border-bottom: 1px solid var(--border); }
-        .tab-btn { flex: 1; padding: 10px; background: transparent; border: none; color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent; font-size: 13px; }
-        .tab-btn.active { color: white; border-bottom-color: var(--accent-blue); background: rgba(255,255,255,0.05); }
+        .tab-btn { flex: 1; padding: 10px; background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 13px; }
+        .tab-btn.active { color: white; border-bottom: 2px solid var(--accent-blue); background: rgba(255,255,255,0.05); }
 
         .tab-content { flex: 1; overflow-y: auto; display: none; }
         .tab-content.active { display: block; }
 
-        /* Stream Feed UI */
         .eq-list { padding: 10px; }
         .eq-item { display: flex; align-items: center; gap: 12px; padding: 12px; background: var(--bg-card); border-radius: 6px; margin-bottom: 8px; cursor: pointer; transition: transform 0.15s, background-color 0.15s; position: relative; }
         .eq-item:hover { transform: translateX(4px); background: #2a3b63; }
         .eq-mag-badge { width: 45px; height: 45px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 15px; color: #000; flex-shrink: 0; }
         .eq-info { flex: 1; min-width: 0; }
-        .eq-place { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 40px; }
+        .eq-place { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 45px; }
         .eq-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; display: flex; justify-content: space-between; }
         
         .src-tag { position: absolute; top: 12px; right: 12px; font-size: 9px; font-weight: bold; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; }
         .src-usgs { background: var(--src-usgs); color: #fff; }
         .src-emsc { background: var(--src-emsc); color: #fff; }
 
-        /* Analíticas */
         .charts-container { padding: 15px; display: flex; flex-direction: column; gap: 20px; }
         .chart-box { background: var(--bg-card); padding: 10px; border-radius: 6px; border: 1px solid var(--border); height: 220px; }
 
-        /* GIS Viewport */
         .map-wrapper { position: relative; height: 100%; width: 100%; }
         #map { height: 100%; width: 100%; }
 
-        /* Dinámica por Magnitudes */
         .m-low { background-color: var(--m-low); color: white; }
         .m-med { background-color: var(--m-med); }
         .m-warn { background-color: var(--m-warn); }
         .m-high { background-color: var(--m-high); color: white; }
         .m-crit { background-color: var(--m-crit); color: white; animation: pulse-border 1s infinite alternate; }
 
-        @keyframes pulse-border {
-            0% { box-shadow: 0 0 0 0 rgba(255,0,0,0.8); }
-            100% { box-shadow: 0 0 0 8px rgba(255,0,0,0); }
-        }
-
+        @keyframes pulse-border { 0% { box-shadow: 0 0 0 0 rgba(255,0,0,0.8); } 100% { box-shadow: 0 0 0 8px rgba(255,0,0,0); } }
         .radar-pulse { background: rgba(255, 0, 0, 0.3); border: 2px solid #ff0000; border-radius: 50%; animation: radar 1.5s infinite linear; }
         @keyframes radar { 0% { transform: scale(0.1); opacity: 1; } 100% { transform: scale(2.5); opacity: 0; } }
 
         @media(max-width: 900px) {
             .app-container { grid-template-columns: 1fr; grid-template-rows: 40vh 60vh; }
-            .sidebar { order: 2; }
-            .map-wrapper { order: 1; }
+            .sidebar { order: 2; } .map-wrapper { order: 1; }
         }
     </style>
 </head>
@@ -132,14 +115,14 @@
         <div class="brand-container">
             <i class="fa-solid fa-satellite-dish animate-pulse"></i>
             <div class="brand-title">
-                <h1>Earthquake Monitor Pro V3</h1>
-                <span>NÚCLEO MULTI-FUENTE DE MONITOREO GLOBAL</span>
+                <h1>Earthquake Monitor Live</h1>
+                <span>NÚCLEO EN TIEMPO REAL: WEBSOCKET & STREAMING</span>
             </div>
         </div>
         <div class="system-status">
-            <div class="status-pill" id="status-usgs">USGS: <span class="online">ONLINE</span></div>
-            <div class="status-pill" id="status-emsc">EMSC: <span class="online">ONLINE</span></div>
-            <span id="sync-time"><i class="fa-solid fa-clock"></i> Sincronizando...</span>
+            <div class="status-pill" id="status-usgs">USGS: <span class="online">STREAM</span></div>
+            <div class="status-pill" id="status-emsc">EMSC: <span class="connecting" id="emsc-state">CONECTANDO...</span></div>
+            <span id="sync-time"><i class="fa-solid fa-bolt"></i> En Vivo</span>
         </div>
     </header>
 
@@ -147,35 +130,35 @@
         <aside class="sidebar">
             <div class="stats-grid">
                 <div class="stat-card">
-                    <div class="label">Sismos Totales</div>
+                    <div class="label">Sismos en Memoria</div>
                     <div class="value" id="stat-total">0</div>
                 </div>
                 <div class="stat-card">
-                    <div class="label">Mag Max</div>
+                    <div class="label">Mag Máx Registrada</div>
                     <div class="value" id="stat-max" style="color: var(--m-high)">0.0</div>
                 </div>
                 <div class="stat-card">
-                    <div class="label">Sismos M ≥ 4.0</div>
+                    <div class="label">Eventos Significativos</div>
                     <div class="value" id="stat-strong">0</div>
                 </div>
                 <div class="stat-card">
-                    <div class="label">Prof. Promedio</div>
+                    <div class="label">Prof. Media</div>
                     <div class="value" id="stat-depth">0 km</div>
                 </div>
             </div>
 
             <div class="audio-controls">
-                <span><i class="fa-solid fa-volume-high"></i> Alertas por Voz Activas</span>
+                <span><i class="fa-solid fa-volume-high"></i> Sintetizador de Voz de Alerta</span>
                 <input type="checkbox" id="voice-toggle" checked>
             </div>
 
             <div class="filters-panel">
                 <div class="filter-group">
-                    <label for="filter-mag"><i class="fa-solid fa-filter"></i> Magnitud Mínima: <span id="mag-val">1.0</span></label>
+                    <label for="filter-mag"><i class="fa-solid fa-filter"></i> Filtrar Magnitud Mínima: <span id="mag-val">1.0</span></label>
                     <input type="range" id="filter-mag" min="1.0" max="8.0" step="0.1" value="1.0" class="filter-control">
                 </div>
                 <div class="filter-group">
-                    <label for="filter-time"><i class="fa-solid fa-calendar-day"></i> Rango Temporal</label>
+                    <label for="filter-time"><i class="fa-solid fa-calendar-day"></i> Ventana Temporal</label>
                     <select id="filter-time" class="filter-control">
                         <option value="1">Última Hora</option>
                         <option value="24" selected>Últimas 24 Horas</option>
@@ -183,14 +166,14 @@
                     </select>
                 </div>
                 <div class="filter-group">
-                    <label for="filter-search"><i class="fa-solid fa-magnifying-glass"></i> Región / Localidad</label>
-                    <input type="text" id="filter-search" placeholder="Ej: Peru, California, Japan..." class="filter-control">
+                    <label for="filter-search"><i class="fa-solid fa-magnifying-glass"></i> Filtrar Ubicación</label>
+                    <input type="text" id="filter-search" placeholder="Buscar país o región..." class="filter-control">
                 </div>
             </div>
 
             <div class="tabs-container">
-                <button class="tab-btn active" data-tab="tab-live"><i class="fa-solid fa-list-ul"></i> Registro</button>
-                <button class="tab-btn" data-tab="tab-analytics"><i class="fa-solid fa-chart-line"></i> Gráficos Vivos</button>
+                <button class="tab-btn active" data-tab="tab-live"><i class="fa-solid fa-list-ul"></i> Registro en Tiempo Real</button>
+                <button class="tab-btn" data-tab="tab-analytics"><i class="fa-solid fa-chart-line"></i> Gráficas Dinámicas</button>
             </div>
 
             <div id="tab-live" class="tab-content active">
@@ -224,37 +207,31 @@
             let chartTimeline = null, chartDepthMag = null;
             let db = null;
             let debounceTimer;
+            let wsClient = null;
 
-            const DB_NAME = "EarthquakeMonitorDB_V4_Multi";
-            const STORE_NAME = "earthquakes_v4";
+            const DB_NAME = "EarthquakeMonitorDB_V5_Live";
+            const STORE_NAME = "earthquakes_v5";
 
-            // --- DE-DUPLICACIÓN E INTERPOLACIÓN GEOGRÁFICA ---
             function isDuplicate(newEvent) {
                 if (state.processedIds.has(newEvent.id)) return true;
-                
-                // Comparación difusa (Margen de 15km y 10s de diferencia para cruzar agencias)
                 for (let existing of state.events) {
                     const timeDiff = Math.abs(existing.time - newEvent.time);
-                    if (timeDiff < 10000) { 
+                    if (timeDiff < 15000) { 
                         const latDiff = Math.abs(existing.lat - newEvent.lat);
                         const lngDiff = Math.abs(existing.lng - newEvent.lng);
-                        if (latDiff < 0.15 && lngDiff < 0.15) {
-                            return true; 
-                        }
+                        if (latDiff < 0.20 && lngDiff < 0.20) return true;
                     }
                 }
                 return false;
             }
 
-            // --- MOTOR 1: CAPA DE PERSISTENCIA LOCAL (IndexedDB) ---
+            // --- INDEXEDDB ---
             function initStorage() {
                 return new Promise((resolve) => {
                     const request = indexedDB.open(DB_NAME, 1);
                     request.onupgradeneeded = (e) => {
                         const database = e.target.result;
-                        if (!database.objectStoreNames.contains(STORE_NAME)) {
-                            database.createObjectStore(STORE_NAME, { keyPath: "id" });
-                        }
+                        if (!database.objectStoreNames.contains(STORE_NAME)) database.createObjectStore(STORE_NAME, { keyPath: "id" });
                     };
                     request.onsuccess = (e) => { db = e.target.result; resolve(); };
                     request.onerror = () => resolve();
@@ -274,25 +251,16 @@
                     const tx = db.transaction(STORE_NAME, "readonly");
                     const store = tx.objectStore(STORE_NAME);
                     const request = store.getAll();
-                    request.onsuccess = () => {
-                        const res = request.result || [];
-                        resolve(res.sort((a,b) => b.time - a.time));
-                    };
+                    request.onsuccess = () => resolve((request.result || []).sort((a,b) => b.time - a.time));
                     request.onerror = () => resolve([]);
                 });
             }
 
-            // --- MOTOR 2: MOTOR DE MAPAS Y SISTEMAS GIS ---
+            // --- MAP MANAGER ---
             function initMap() {
-                map = L.map("map", { center: [10, -20], zoom: 3, zoomControl: false });
+                map = L.map("map", { center: [-5, -75], zoom: 4, zoomControl: false });
                 L.control.zoom({ position: 'bottomright' }).addTo(map);
-
-                const darkTiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '©CartoDB' });
-                const satTiles = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Esri' });
-                const streetTiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: 'OSM' });
-
-                darkTiles.addTo(map);
-                L.control.layers({ "Modo Oscuro Operativo": darkTiles, "Visor Satelital GIS": satTiles, "Mapa Estándar": streetTiles }, null, { position: 'topright' }).addTo(map);
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '©CartoDB' }).addTo(map);
                 layerGroup = L.layerGroup().addTo(map);
             }
 
@@ -305,181 +273,277 @@
             }
 
             function getMagClass(m) {
-                if (m >= 6.0) return "m-crit";
-                if (m >= 5.0) return "m-high";
-                if (m >= 4.0) return "m-warn";
-                if (m >= 3.0) return "m-med";
+                if (m >= 6.0) return "m-crit"; if (m >= 5.0) return "m-high";
+                if (m >= 4.0) return "m-warn"; if (m >= 3.0) return "m-med";
                 return "m-low";
             }
 
             function renderMarkers(events) {
                 if (!layerGroup) return;
                 layerGroup.clearLayers();
-                let highestMagEvent = null;
-
                 events.forEach(eq => {
-                    if (!highestMagEvent || eq.mag > highestMagEvent.mag) highestMagEvent = eq;
                     const markerColor = getColorByMag(eq.mag);
-
                     const circle = L.circleMarker([eq.lat, eq.lng], {
                         radius: Math.max(4, eq.mag * 3.5),
-                        color: markerColor,
-                        fillColor: markerColor,
-                        fillOpacity: 0.65,
-                        weight: eq.mag >= 6 ? 3 : 1
+                        color: markerColor, fillColor: markerColor, fillOpacity: 0.65, weight: eq.mag >= 6 ? 3 : 1
                     });
-
                     circle.bindPopup(`
                         <div style="color:#000; min-width:180px; font-size:12px;">
-                            <h4 style="margin:0; color:${markerColor}; font-size:14px;">Magnitud ${eq.mag.toFixed(1)}</h4>
+                            <h4 style="margin:0; color:${markerColor};">Magnitud ${eq.mag.toFixed(1)}</h4>
                             <p style="margin:4px 0; font-weight:bold;">${eq.place}</p>
                             <p style="margin:0;">Profundidad: ${eq.depth} km</p>
-                            <p style="margin:2px 0; font-weight:bold; color:#555;">Fuente: ${eq.source.toUpperCase()}</p>
-                            <p style="margin:0; color:#666;">${new Date(eq.time).toLocaleString()}</p>
+                            <p style="margin:2px 0; font-weight:bold;">Origen: ${eq.source.toUpperCase()}</p>
                         </div>
                     `);
-
                     circle.on('click', () => focusEvent(eq.lat, eq.lng, 7));
                     layerGroup.addLayer(circle);
                 });
-
-                if (highestMagEvent && events.length > 0 && map.getZoom() <= 3) {
-                    focusEvent(highestMagEvent.lat, highestMagEvent.lng, 5);
-                }
             }
 
             function focusEvent(lat, lng, zoomLevel = 7) {
                 map.setView([lat, lng], zoomLevel, { animate: true, duration: 0.8 });
                 if (currentRadarCircle) map.removeLayer(currentRadarCircle);
-
                 const radarIcon = L.divIcon({ className: 'radar-pulse', iconSize: [40, 40], iconAnchor: [20, 20] });
                 currentRadarCircle = L.marker([lat, lng], { icon: radarIcon }).addTo(map);
                 setTimeout(() => { if (currentRadarCircle) map.removeLayer(currentRadarCircle); }, 6000);
             }
 
-            // --- MOTOR 3: NOTIFICACIONES CRÍTICAS Y ALERTAS ---
-            if (Notification.permission === 'default') Notification.requestPermission();
+            // --- ALERT ENGINE ---
+            function processAlerts(newEvent) {
+                if (newEvent.mag < 3.5) return;
 
-            function processAlerts(newEvents) {
-                if (newEvents.length === 0) return;
-                const criticalEvent = newEvents.reduce((prev, curr) => (prev.mag > curr.mag) ? prev : curr);
-                if (criticalEvent.mag >= 4.0) triggerAlertEffects(criticalEvent);
-            }
-
-            function triggerAlertEffects(eq) {
-                if (eq.mag >= 5.0) {
+                if (newEvent.mag >= 5.0) {
                     document.body.classList.add('flash-active');
-                    setTimeout(() => document.body.classList.remove('flash-active'), 2000);
+                    setTimeout(() => document.body.classList.remove('flash-active'), 1500);
                 }
 
                 if (Notification.permission === 'granted') {
-                    new Notification(`⚠️ ALERTA SÍSMICA (${eq.source}): M ${eq.mag.toFixed(1)}`, {
-                        body: `${eq.place} - Prof: ${eq.depth}km`,
+                    new Notification(`🚨 SISMÓGRAFO EN VIVO: M ${newEvent.mag.toFixed(1)}`, {
+                        body: `${newEvent.place} - Fuente: ${newEvent.source.toUpperCase()}`,
                         icon: 'https://cdn-icons-png.flaticon.com/512/814/814467.png'
                     });
                 }
 
-                if ('vibrate' in navigator) navigator.vibrate(eq.mag >= 6.0 ? [500, 200, 500] : [300, 100]);
-
                 try {
                     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                    const osc = audioCtx.createOscillator();
-                    const gain = audioCtx.createGain();
+                    const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
                     osc.connect(gain); gain.connect(audioCtx.destination);
-                    osc.type = 'sawtooth';
-                    osc.frequency.value = eq.mag >= 6.0 ? 880 : 440;
+                    osc.frequency.value = newEvent.mag >= 5.5 ? 600 : 350;
                     gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
-                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + (eq.mag * 0.2));
-                    osc.start(); osc.stop(audioCtx.currentTime + (eq.mag * 0.2));
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 1);
+                    osc.start(); osc.stop(audioCtx.currentTime + 1);
                 } catch(e){}
 
                 if (document.getElementById('voice-toggle').checked && 'speechSynthesis' in window) {
-                    setTimeout(() => {
-                        const msg = new SpeechSynthesisUtterance(`Sismo magnitud ${eq.mag.toFixed(1)} en ${eq.place}, informado por ${eq.source}`);
-                        msg.lang = 'es-ES'; msg.rate = 0.95;
-                        window.speechSynthesis.speak(msg);
-                    }, 600);
+                    const msg = new SpeechSynthesisUtterance(`Atención, nuevo sismo magnitud ${newEvent.mag.toFixed(1)} en ${newEvent.place}`);
+                    msg.lang = 'es-ES'; msg.rate = 1.0;
+                    window.speechSynthesis.speak(msg);
                 }
             }
 
-            // --- MOTOR 4: COMPONENTE ESTADÍSTICO (Chart.js) ---
+            // --- REALTIME STREAM CHANNELS ---
+            function initRealtimeStreams() {
+                // CANAL 1: EMSC WebSocket (Streaming instantáneo real)
+                function connectEMSCWebsocket() {
+                    wsClient = new WebSocket("wss://www.seismicportal.eu/standing_order/websocket");
+                    
+                    wsClient.onopen = () => {
+                        document.getElementById('emsc-state').className = "online";
+                        document.getElementById('emsc-state').textContent = "WEBSOCKET LIVE";
+                    };
+
+                    wsClient.onmessage = (event) => {
+                        try {
+                            const data = JSON.parse(event.data);
+                            if (data.action !== "create") return;
+                            
+                            const prop = data.data.properties;
+                            const geom = data.data.geometry;
+                            
+                            const packet = {
+                                id: "emsc_" + data.data.id,
+                                mag: prop.mag,
+                                place: prop.flynn_region || "Región EMSC",
+                                time: new Date(prop.time).getTime(),
+                                depth: geom.coordinates[2] || 0,
+                                lng: geom.coordinates[0],
+                                lat: geom.coordinates[1],
+                                source: "emsc"
+                            };
+
+                            injectRealtimeEvent(packet);
+                        } catch(err) {}
+                    };
+
+                    wsClient.onclose = () => {
+                        document.getElementById('emsc-state').className = "connecting";
+                        document.getElementById('emsc-state').textContent = "RECONECTANDO...";
+                        setTimeout(connectEMSCWebsocket, 10000);
+                    };
+                }
+
+                // CANAL 2: USGS Short-polling de alta frecuencia (Cada 10s sobre feed de 5 min)
+                async function pollUSGSLive() {
+                    try {
+                        const res = await fetch("https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson");
+                        const data = await res.json();
+                        (data.features || []).forEach(f => {
+                            const packet = {
+                                id: "usgs_" + f.id,
+                                mag: f.properties.mag || 0,
+                                place: f.properties.place || 'Región USGS',
+                                time: f.properties.time,
+                                depth: f.geometry.coordinates[2] || 0,
+                                lng: f.geometry.coordinates[0],
+                                lat: f.geometry.coordinates[1],
+                                source: "usgs"
+                            };
+                            injectRealtimeEvent(packet);
+                        });
+                    } catch(e){}
+                    setTimeout(pollUSGSLive, 12000);
+                }
+
+                connectEMSCWebsocket();
+                pollUSGSLive();
+            }
+
+            function injectRealtimeEvent(packet) {
+                if (!isDuplicate(packet)) {
+                    state.processedIds.add(packet.id);
+                    state.events.unshift(packet); // Agregar inmediatamente al inicio
+                    saveEvents([packet]);
+                    processAlerts(packet);
+                    applyFilters();
+                    
+                    // Si cumple los filtros visuales, disparar un micro-foco en el mapa
+                    if(packet.mag >= state.filters.minMag) {
+                        focusEvent(packet.lat, packet.lng, map.getZoom() > 4 ? map.getZoom() : 5);
+                    }
+                }
+            }
+
+            // --- CARGA DE DATOS HISTÓRICOS INICIAL ---
+            async function fetchInitialHistory() {
+                try {
+                    const res = await fetch("https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson");
+                    const data = await res.json();
+                    let batch = [];
+                    (data.features || []).forEach(f => {
+                        const packet = {
+                            id: "usgs_" + f.id, mag: f.properties.mag || 0,
+                            place: f.properties.place || 'Región Desconocida', time: f.properties.time,
+                            depth: f.geometry.coordinates[2] || 0, lng: f.geometry.coordinates[0], lat: f.geometry.coordinates[1],
+                            source: "usgs"
+                        };
+                        if (!isDuplicate(packet)) {
+                            state.processedIds.add(packet.id);
+                            batch.push(packet);
+                        }
+                    });
+                    state.events = [...state.events, ...batch].sort((a,b) => b.time - a.time);
+                    saveEvents(batch);
+                    applyFilters();
+                } catch(e){}
+            }
+
+            // --- RENDERIZADO DE INTERFAZ & GRÁFICAS ---
+            function updateUI(events) {
+                document.getElementById('stat-total').textContent = events.length;
+                let maxMag = 0, strongCount = 0, totalDepth = 0;
+                const container = document.getElementById('eq-list-container');
+                
+                // Optimizamos renderizado para evitar parpadeos masivos reconstruyendo nodos
+                const currentHtmlIds = Array.from(container.children).map(node => node.dataset.id);
+                
+                if (events.length === 0) {
+                    container.innerHTML = `<div style="text-align:center; padding:20px; color:var(--text-muted);">Sin registros bajo filtros.</div>`;
+                    return;
+                }
+
+                events.forEach((eq, idx) => {
+                    if (eq.mag > maxMag) maxMag = eq.mag;
+                    if (eq.mag >= 4.0) strongCount++;
+                    totalDepth += eq.depth;
+
+                    // Si el elemento es nuevo y no está en el DOM, se inyecta arriba con animación
+                    if (!currentHtmlIds.includes(eq.id) && idx < 50) {
+                        const div = document.createElement('div');
+                        div.className = 'eq-item new-arrival';
+                        div.dataset.id = eq.id;
+                        div.innerHTML = `
+                            <div class="eq-mag-badge ${getMagClass(eq.mag)}">${eq.mag.toFixed(1)}</div>
+                            <div class="eq-info">
+                                <div class="eq-place">${eq.place}</div>
+                                <div class="eq-meta">
+                                    <span><i class="fa-solid fa-layer-group"></i> ${eq.depth.toFixed(0)} km</span>
+                                    <span>${new Date(eq.time).toLocaleTimeString()}</span>
+                                </div>
+                            </div>
+                            <span class="src-tag src-${eq.source}">${eq.source}</span>
+                        `;
+                        div.onclick = () => focusEvent(eq.lat, eq.lng, 8);
+                        container.insertBefore(div, container.firstChild);
+                    }
+                });
+
+                // Si hay un cambio estructural grande o es primer renderizado completo
+                if(container.children.length === 0 || container.children.length > events.length + 5) {
+                    container.innerHTML = "";
+                    events.slice(0, 80).forEach(eq => {
+                        const div = document.createElement('div');
+                        div.className = 'eq-item';
+                        div.dataset.id = eq.id;
+                        div.innerHTML = `
+                            <div class="eq-mag-badge ${getMagClass(eq.mag)}">${eq.mag.toFixed(1)}</div>
+                            <div class="eq-info">
+                                <div class="eq-place">${eq.place}</div>
+                                <div class="eq-meta">
+                                    <span><i class="fa-solid fa-layer-group"></i> ${eq.depth.toFixed(0)} km</span>
+                                    <span>${new Date(eq.time).toLocaleTimeString()}</span>
+                                </div>
+                            </div>
+                            <span class="src-tag src-${eq.source}">${eq.source}</span>
+                        `;
+                        div.onclick = () => focusEvent(eq.lat, eq.lng, 8);
+                        container.appendChild(div);
+                    });
+                }
+
+                document.getElementById('stat-max').textContent = maxMag.toFixed(1);
+                document.getElementById('stat-strong').textContent = strongCount;
+                document.getElementById('stat-depth').textContent = `${events.length ? (totalDepth / events.length).toFixed(1) : 0} km`;
+            }
+
             function updateCharts(events) {
                 if (events.length === 0) return;
                 const sorted = [...events].sort((a,b) => a.time - b.time).slice(-15);
-                const labels = sorted.map(e => new Date(e.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
+                const labels = sorted.map(e => new Date(e.time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'}));
                 const magnitudes = sorted.map(e => e.mag);
-                const pointColors = sorted.map(e => getColorByMag(e.mag));
 
                 if (!chartTimeline) {
                     chartTimeline = new Chart(document.getElementById('chart-timeline').getContext('2d'), {
                         type: 'line',
-                        data: {
-                            labels: labels,
-                            datasets: [{ label: 'Historial', data: magnitudes, borderColor: '#00b4d8', backgroundColor: 'rgba(0,180,216,0.1)', borderWidth: 2, tension: 0.2, pointBackgroundColor: pointColors }]
-                        },
-                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { grid: { color: '#1f2937' } }, x: { grid: { color: '#1f2937' } } } }
+                        data: { labels, datasets: [{ label: 'Línea de Tiempo', data: magnitudes, borderColor: '#00b4d8', tension: 0.1, fill: false }] },
+                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
                     });
                 } else {
                     chartTimeline.data.labels = labels;
                     chartTimeline.data.datasets[0].data = magnitudes;
-                    chartTimeline.data.datasets[0].pointBackgroundColor = pointColors;
                     chartTimeline.update('none');
                 }
 
-                const scatterData = events.map(e => ({ x: e.mag, y: e.depth }));
+                const scatterData = events.slice(0, 100).map(e => ({ x: e.mag, y: e.depth }));
                 if (!chartDepthMag) {
                     chartDepthMag = new Chart(document.getElementById('chart-depth-mag').getContext('2d'), {
                         type: 'scatter',
-                        data: { datasets: [{ label: 'Profundidad vs Mag', data: scatterData, backgroundColor: '#ff5722' }] },
-                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { title: { display: true, text: 'Magnitud' } }, y: { reverse: true, title: { display: true, text: 'Prof (km)' } } } }
+                        data: { datasets: [{ label: 'Prof vs Mag', data: scatterData, backgroundColor: '#ff5722' }] },
+                        options: { responsive: true, maintainAspectRatio: false, scales: { y: { reverse: true } }, plugins: { legend: { display: false } } }
                     });
                 } else {
                     chartDepthMag.data.datasets[0].data = scatterData;
                     chartDepthMag.update('none');
                 }
-            }
-
-            // --- MOTOR 5: CAPA DE INTERFAZ REACTIVA (UI) ---
-            function updateUI(events) {
-                document.getElementById('stat-total').textContent = events.length;
-                let maxMag = 0, strongCount = 0, totalDepth = 0;
-                const container = document.getElementById('eq-list-container');
-                container.innerHTML = '';
-
-                if (events.length === 0) {
-                    container.innerHTML = `<div style="text-align:center; padding:20px; color:var(--text-muted);">Sin registros bajo filtros actuales.</div>`;
-                    document.getElementById('stat-max').textContent = "0.0";
-                    document.getElementById('stat-strong').textContent = "0";
-                    document.getElementById('stat-depth').textContent = "0 km";
-                    return;
-                }
-
-                events.forEach(eq => {
-                    if (eq.mag > maxMag) maxMag = eq.mag;
-                    if (eq.mag >= 4.0) strongCount++;
-                    totalDepth += eq.depth;
-
-                    const div = document.createElement('div');
-                    div.className = 'eq-item';
-                    div.innerHTML = `
-                        <div class="eq-mag-badge ${getMagClass(eq.mag)}">${eq.mag.toFixed(1)}</div>
-                        <div class="eq-info">
-                            <div class="eq-place">${eq.place}</div>
-                            <div class="eq-meta">
-                                <span><i class="fa-solid fa-layer-group"></i> ${eq.depth ? eq.depth.toFixed(0) : 0} km</span>
-                                <span>${new Date(eq.time).toLocaleTimeString()}</span>
-                            </div>
-                        </div>
-                        <span class="src-tag src-${eq.source}">${eq.source}</span>
-                    `;
-                    div.onclick = () => focusEvent(eq.lat, eq.lng, 8);
-                    container.appendChild(div);
-                });
-
-                document.getElementById('stat-max').textContent = maxMag.toFixed(1);
-                document.getElementById('stat-strong').textContent = strongCount;
-                document.getElementById('stat-depth').textContent = `${(totalDepth / events.length).toFixed(1)} km`;
-                document.getElementById('sync-time').innerHTML = `<i class="fa-solid fa-rotate"></i> Sync: ${new Date().toLocaleTimeString()}`;
             }
 
             function applyFilters() {
@@ -492,103 +556,19 @@
                 updateCharts(state.filteredEvents);
             }
 
-            function triggerDebounce() {
-                clearTimeout(debounceTimer);
-                debounceTimer = setTimeout(applyFilters, 250);
-            }
+            function triggerDebounce() { clearTimeout(debounceTimer); debounceTimer = setTimeout(applyFilters, 200); }
 
-            // --- PIPELINE DATA STREAMING (MULTIPLE ENDPOINTS) ---
-            async function fetchData() {
-                if (!navigator.onLine) return;
-
-                let newlyDetected = [];
-
-                // 1. LLAMADA ENDPOINT USGS
-                try {
-                    const usgsRes = await fetch("https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson");
-                    const usgsData = await usgsRes.json();
-                    document.getElementById('status-usgs').innerHTML = 'USGS: <span class="online">ONLINE</span>';
-                    
-                    (usgsData.features || []).forEach(f => {
-                        const packet = {
-                            id: "usgs_" + f.id,
-                            mag: f.properties.mag || 0,
-                            place: f.properties.place || 'Región Desconocida',
-                            time: f.properties.time,
-                            depth: f.geometry.coordinates[2] || 0,
-                            lng: f.geometry.coordinates[0],
-                            lat: f.geometry.coordinates[1],
-                            source: "usgs"
-                        };
-                        if (!isDuplicate(packet)) {
-                            state.processedIds.add(packet.id);
-                            newlyDetected.push(packet);
-                        }
-                    });
-                } catch(e) { 
-                    document.getElementById('status-usgs').innerHTML = 'USGS: <span class="offline">TIMEOUT</span>';
-                }
-
-                // 2. LLAMADA ENDPOINT EMSC (EUROPEO)
-                try {
-                    const emscRes = await fetch("https://www.seismicportal.eu/fdsnws/event/1/query?limit=100&format=json");
-                    const emscData = await emscRes.json();
-                    document.getElementById('status-emsc').innerHTML = 'EMSC: <span class="online">ONLINE</span>';
-                    
-                    (emscData.features || []).forEach(f => {
-                        const packet = {
-                            id: "emsc_" + (f.id || f.properties.source_id),
-                            mag: f.properties.mag || 0,
-                            place: f.properties.flynn_region || 'Región Europea',
-                            time: new Date(f.properties.time).getTime(),
-                            depth: f.geometry.coordinates[2] || 0,
-                            lng: f.geometry.coordinates[0],
-                            lat: f.geometry.coordinates[1],
-                            source: "emsc"
-                        };
-                        if (!isDuplicate(packet)) {
-                            state.processedIds.add(packet.id);
-                            newlyDetected.push(packet);
-                        }
-                    });
-                } catch(e) {
-                    document.getElementById('status-emsc').innerHTML = 'EMSC: <span class="offline">TIMEOUT</span>';
-                }
-
-                // Inyección MOCK en el arranque inicial
-                if (state.isInitialLoad && newlyDetected.length === 0) {
-                    newlyDetected.push({
-                        id: "igp_live_mock_" + Date.now(),
-                        mag: 6.5,
-                        place: "40 km al SO de Chala, Caravelí - IGP Perú",
-                        time: Date.now() - 5000,
-                        depth: 28,
-                        lng: -74.25,
-                        lat: -16.20,
-                        source: "usgs"
-                    });
-                }
-
-                if (newlyDetected.length > 0) {
-                    state.events = [...newlyDetected, ...state.events].sort((a,b) => b.time - a.time);
-                    if (!state.isInitialLoad) processAlerts(newlyDetected);
-                    saveEvents(state.events);
-                }
-
-                state.isInitialLoad = false;
-                applyFilters();
-            }
-
-            // --- INITIALIZERS ---
+            // --- INIT APP ---
             async function startApp() {
                 initMap();
                 
+                if (Notification.permission === 'default') Notification.requestPermission();
+
                 document.querySelectorAll('.tab-btn').forEach(btn => {
                     btn.addEventListener('click', () => {
                         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
                         document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-                        btn.classList.add('active');
-                        document.getElementById(btn.dataset.tab).classList.add('active');
+                        btn.classList.add('active'); document.getElementById(btn.dataset.tab).classList.add('active');
                     });
                 });
 
@@ -599,7 +579,7 @@
                 });
                 document.getElementById('filter-time').addEventListener('change', (e) => {
                     state.filters.timeWindow = parseInt(e.target.value);
-                    fetchData();
+                    triggerDebounce();
                 });
                 document.getElementById('filter-search').addEventListener('input', (e) => {
                     state.filters.searchQuery = e.target.value.toLowerCase().trim();
@@ -614,34 +594,8 @@
                     applyFilters();
                 }
 
-                fetchData();
-                setInterval(fetchData, 30000); 
-            }
-
-            // --- SERVICE WORKER CONTROL INTERNO ---
-            if ('serviceWorker' in navigator) {
-                window.addEventListener('load', () => {
-                    const swCode = `
-                        const CACHE = 'eq-v4-multi-cache';
-                        self.addEventListener('install', e => {
-                            e.waitUntil(caches.open(CACHE).then(c => c.addAll([
-                                './index.html',
-                                'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
-                                'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
-                                'https://cdn.jsdelivr.net/npm/chart.js',
-                                'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css'
-                            ])).then(() => self.skipWaiting()));
-                        });
-                        self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
-                        self.addEventListener('fetch', e => {
-                            if(e.request.url.includes('earthquake.usgs.gov') || e.request.url.includes('seismicportal.eu')) return;
-                            e.respondWith(caches.match(e.request).then(res => res || fetch(e.request)));
-                        });
-                    `;
-                    const blob = new Blob([swCode], { type: 'application/javascript' });
-                    const swUrl = URL.createObjectURL(blob);
-                    navigator.serviceWorker.register(swUrl, { scope: './' }).catch(()=>{});
-                });
+                await fetchInitialHistory();
+                initRealtimeStreams();
             }
 
             window.addEventListener('DOMContentLoaded', startApp);
