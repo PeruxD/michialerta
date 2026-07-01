@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitor Sísmico en Tiempo Real</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        body {
+            display: flex;
+            height: 100vh;
+            background-color: #1a1a1a;
+            color: #fff;
+        }
+        #sidebar {
+            width: 350px;
+            background-color: #242424;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.5);
+            z-index: 10;
+        }
+        h1 {
+            font-size: 1.5rem;
+            margin-bottom: 15px;
+            color: #ff4d4d;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        #status {
+            font-size: 0.85rem;
+            color: #00ffcc;
+            margin-bottom: 20px;
+        }
+        #earthquake-list {
+            flex: 1;
+            overflow-y: auto;
+            margin-top: 10px;
+        }
+        .eq-item {
+            background: #333;
+            padding: 12px;
+            margin-bottom: 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            border-left: 5px solid #ccc;
+            transition: transform 0.2s;
+        }
+        .eq-item:hover {
+            transform: scale(1.02);
+            background: #3d3d3d;
+        }
+        .mag-high { border-left-color: #ff4d4d; }
+        .mag-med { border-left-color: #ffa500; }
+        .mag-low { border-left-color: #00ffcc; }
+
+        #map {
+            flex: 1;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="sidebar">
+        <h1>⚠️ Alerta Sísmica</h1>
+        <div id="status">Conectado a USGS (Actualizando cada 30s)...</div>
+        <h3>Últimos eventos (Mag 2.5+)</h3>
+        <div id="earthquake-list">Cargando datos...</div>
+    </div>
+
+    <div id="map"></div>
+
+    <script>
+        let map;
+        let markers = [];
+        // URL de la USGS para sismos de magnitud 2.5+ en la última hora
+        const USGS_URL = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_hour.geojson";
+
+        // Inicializar el mapa de Google
+        function initMap() {
+            map = new google.maps.Map(document.getElementById("map"), {
+                center: { lat: 19.4326, lng: -99.1332 }, // Centrado por defecto en CDMX
+                zoom: 5,
+                styles: [ // Estilo oscuro para el mapa
+                    { elementType: "geometry", stylers: [{ color: "#242424" }] },
+                    { elementType: "labels.text.stroke", stylers: [{ color: "#242424" }] },
+                    { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
+                    { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
+                    { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
+                    { featureType: "road", elementType: "geometry", stylers: [{ color: "#38414e" }] },
+                    { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#212a37" }] },
+                    { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#9ca5b3" }] },
+                    { featureType: "water", elementType: "geometry", stylers: [{ color: "#17263c" }] }
+                ]
+            });
+
+            // Primera carga de datos
+            fetchEarthquakeData();
+
+            // Actualización en tiempo real cada 30 segundos
+            setInterval(fetchEarthquakeData, 30000);
+        }
+
+        async function fetchEarthquakeData() {
+            try {
+                const response = await fetch(USGS_URL);
+                const data = await response.json();
+                
+                document.getElementById("status").innerText = `Última actualización: ${new Date().toLocaleTimeString()}`;
+                
+                // Limpiar marcadores anteriores
+                clearMarkers();
+                
+                const listContainer = document.getElementById("earthquake-list");
+                listContainer.innerHTML = "";
+
+                if (data.features.length === 0) {
+                    listContainer.innerHTML = "<p>Sin sismos recientes significativos.</p>";
+                    return;
+                }
+
+                data.features.forEach(feature => {
+                    const props = feature.properties;
+                    const coords = feature.geometry.coordinates;
+                    const latLng = { lat: coords[1], lng: coords[0] };
+                    const mag = props.mag;
+                    const place = props.place;
+                    const time = new Date(props.time).toLocaleTimeString();
+
+                    // Determinar color por magnitud
+                    let colorClass = "mag-low";
+                    let markerColor = "#00ffcc";
+                    if (mag >= 6.0) {
+                        colorClass = "mag-high";
+                        markerColor = "#ff4d4d";
+                        // Simulación de alerta auditiva/visual para sismos fuertes
+                        triggerAlert(mag, place);
+                    } else if (mag >= 4.5) {
+                        colorClass = "mag-med";
+                        markerColor = "#ffa500";
+                    }
+
+                    // Crear elemento en la barra lateral
+                    const item = document.createElement("div");
+                    item.className = `eq-item ${colorClass}`;
+                    item.innerHTML = `<strong>Mag: ${mag}</strong> - ${place}<br><small>${time}</small>`;
+                    item.addEventListener("click", () => {
+                        map.setCenter(latLng);
+                        map.setZoom(8);
+                    });
+                    listContainer.appendChild(item);
+
+                    // Crear marcador personalizado en el mapa de Google
+                    const marker = new google.maps.Marker({
+                        position: latLng,
+                        map: map,
+                        title: `Mag: ${mag} - ${place}`,
+                        icon: {
+                            path: google.maps.SymbolPath.CIRCLE,
+                            scale: mag * 3, // El tamaño depende de la magnitud
+                            fillColor: markerColor,
+                            fillOpacity: 0.6,
+                            strokeWeight: 1,
+                            strokeColor: "#ffffff"
+                        }
+                    });
+
+                    // Ventana de información al hacer clic en el marcador
+                    const infowindow = new google.maps.InfoWindow({
+                        content: `<div><strong>Magnitud:</strong> ${mag}<br><strong>Lugar:</strong> ${place}<br><strong>Hora:</strong> ${time}</div>`
+                    });
+
+                    marker.addListener("click", () => {
+                        infowindow.open(map, marker);
+                    });
+
+                    markers.push(marker);
+                });
+
+            } catch (error) {
+                console.error("Error al obtener datos sísmicos:", error);
+                document.getElementById("status").innerText = "Error al actualizar datos.";
+            }
+        }
+
+        function clearMarkers() {
+            markers.forEach(m => m.setMap(null));
+            markers = [];
+        }
+
+        function triggerAlert(mag, place) {
+            // Utiliza la API de síntesis de voz del navegador para emular la alerta
+            if ('speechSynthesis' in window) {
+                const msg = new SpeechSynthesisUtterance(`Alerta sísmica. Sismo fuerte de magnitud ${mag} detectado en ${place}`);
+                msg.lang = 'es-ES';
+                window.speechSynthesis.speak(msg);
+            }
+            console.warn(`🚨 ALERTA MÁXIMA: Sismo de ${mag} en ${place}`);
+        }
+    </script>
+
+    <script src="https://maps.googleapis.com/maps/api/js?key=TU_API_KEY_DE_GOOGLE&callback=initMap" async defer></script>
+</body>
+</html>
